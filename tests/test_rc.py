@@ -1,14 +1,14 @@
 import pytest
 
 from systemrdl import RDLCompileError
-from register_compiler.rc import MyCompiler
+from pyrcom.rc import RegisterCompiler
 
-from register_compiler.sv.codegen import ASTCodeGenerator
+from pyrcom.sv.codegen import ASTCodeGenerator
 
 
 def test_nonExistingFile():
     with pytest.raises(FileNotFoundError):
-        compiler = MyCompiler(["non_existing_file"])
+        compiler = RegisterCompiler(["non_existing_file"])
         compiler.compile()
 
 

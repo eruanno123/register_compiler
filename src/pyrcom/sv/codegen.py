@@ -15,7 +15,7 @@ import re
 import functools
 from jinja2 import Environment, FileSystemLoader
 
-from register_compiler.sv.ast import Sll, Srl, Sra, LessThan, GreaterThan, Eq, \
+from pyrcom.sv.ast import Sll, Srl, Sra, LessThan, GreaterThan, Eq, \
     NotEq, Eql, NotEql, Cond, LessEq, GreaterEq
 
 #-------------------------------------------------------------------------------

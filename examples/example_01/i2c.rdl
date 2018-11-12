@@ -191,12 +191,7 @@ addrmap addrmap_I2C
 {
     regs_I2C           I2C            @0x0000;
 
-    /* Documentation */
-    I2C.CTRL.EN->brief = "Enable/disable controller";
-    I2C.CTRL.EN->desc = "
-This is a long
-multiline description of the controller.
-";
+    `include "i2c_doc.rdl"
 
 };
 
