@@ -20,6 +20,7 @@
 
 from systemrdl import RDLCompiler, RDLListener, RDLWalker, RDLCompileError
 from systemrdl.node import FieldNode
+from systemrdl.messages import *
 
 from pyrcom.regtree import RegisterTree
 
@@ -59,30 +60,43 @@ class RegisterTreeExtractionListener(RDLListener):
 
 class RegisterCompiler:
 
-    def __init__(self, cfg):
-        self.src_files = cfg.src_files
-        self.incl_search_paths = cfg.incl_search_paths
+    def __init__(self, printer, cfg):
+        self.printer = printer  # type MessagePrinter
+        self.cfg = cfg
+
+    def getWarningMask(self, warning_flags):
+        w_bits = {
+            'all': W_ALL,
+            'missing-reset': W_MISSING_RESET,
+            'implicit': W_IMPLICIT_ADDR | W_IMPLICIT_FIELD_POS,
+            'implicit-addr': W_IMPLICIT_FIELD_POS,
+            'implicit-field-pos': W_IMPLICIT_ADDR
+        }
+        mask = 0
+        for wf, suppressed in warning_flags.items():
+            bits = w_bits[wf]
+            if suppressed:
+                mask &= ~bits
+            else:
+                mask |= bits
+        return mask
 
     def compile(self):
-        rdlc = RDLCompiler()
+        rcfg = self.cfg
 
-        for input_file in self.src_files:
-            rdlc.compile_file(input_file, self.incl_search_paths)
+        warning_mask = self.getWarningMask(rcfg.warning_flags)
+        self.printer.print_message("debug", str.format(
+            "warning_mask: {0}", warning_mask), None)
 
-        root = rdlc.elaborate()
+        rdlc = RDLCompiler(message_printer=self.printer,
+                           warning_flags=warning_mask)
 
-        walker = RDLWalker(unroll=True)
+        for input_file in rcfg.src_files:
+            rdlc.compile_file(input_file, rcfg.incl_search_paths)
+
+        root = rdlc.elaborate(top_def_name=rcfg.top_def_name)
+
+        walker = RDLWalker(
+            unroll=True, skip_not_present=rcfg.skip_not_present)
         listener = RegisterTreeExtractionListener()
         walker.walk(root, listener)
-
-
-if __name__ == '__main__':
-    src_files = sys.argv[1:]
-
-    # Create an instance of the compiler
-    compiler = RegisterCompiler(src_files)
-
-    try:
-        compiler.compile()
-    except RDLCompileError:
-        sys.exit(1)
