@@ -1,0 +1,202 @@
+
+/*
+ * Example of register file of certain I2C module
+ */
+
+/*
+ * CTRL                 0x0     Control register
+ * STATUS               0x1     Status register
+ * ISER                 0x3     Interrupt status enable register
+ * ISTAT                0x4     Interrupt status register
+ * DATA                 0x6     Read and write data register
+ * TIMING               0x7     Timing configuration register
+ */
+
+property reset_mask {
+    type        = number;
+    component   = field;
+};
+
+property brief {
+    type        = string;
+    component   = regfile | reg | field;
+};
+
+regfile regs_I2C
+{
+    default regwidth = 32;
+
+    reg
+    {
+        brief               = "Control register";
+
+        enum CONTROL_ENABLE_encoding {
+            DISABLE         = 1'b0;
+            ENABLE          = 1'b1;
+        };
+
+        enum CONTROL_MODE_encoding {
+            MASTER          = 1'b0;
+            SLAVE           = 1'b1;
+        };
+
+        default sw = w;
+        default hw = r;
+
+        field
+        {
+            brief           = "Module operation mode";
+            encode          = CONTROL_MODE_encoding;
+        } MODE [8:8];
+
+        field
+        {
+            brief           = "Request stop";
+        } STO [2:2];
+
+        field
+        {
+            brief           = "Request start";
+        } STA [1:1];
+
+        field
+        {
+            sw              = rw;
+            brief           = "Module enable";
+            encode          = CONTROL_ENABLE_encoding;
+        } EN [0:0];
+
+    } CTRL @0x0;
+
+    reg
+    {
+        default sw = r;
+        default hw = w;
+
+        enum STATUS_STATE_encoding {
+            IDLE = 2'd0;
+            XFER = 2'd1;
+            NACK = 2'd2;
+            ARBLOST = 2'd3;
+        };
+
+        field
+        {
+            brief           = "Transfer state";
+            encode          = STATUS_STATE_encoding;
+        } STATE [2:1];
+
+        field
+        {
+            brief           = "Module busy flag";
+        } BUSY [0:0];
+
+    } STATUS @0x4;
+
+    reg
+    {
+        default sw          = r;
+        default hw          = rw;
+
+        /* Write one to clear policy */
+        default level intr;
+        default woclr;
+        default sticky;
+
+        field {
+            brief = "Arbitration lost flag";
+        } ARB_IF [3:3];
+
+        field {
+            brief = "NACK received flag";
+        } NACK_IF [2:2];
+
+        field {
+            brief = "RX not empty flag";
+        } RX_IF [1:1];
+
+        field {
+            brief = "TX empty flag";
+        } TX_IF [0:0];
+
+    } ISTAT @0x8;
+
+    reg
+    {
+        default sw          = rw;
+        default hw          = r;
+        default reset       = 0x0;
+        default reset_mask  = 0x1;
+
+        field {
+            brief = "Arbitration lost interrupt enable";
+        } ARB_IE [3:3];
+
+        field {
+            brief = "NACK received interrupt enable";
+        } NACK_IE [2:2];
+
+        field {
+            brief = "RX not empty interrupt enable";
+        } RX_IE [1:1];
+
+        field {
+            brief = "TX empty interrupt enable";
+        } TX_IE [0:0];
+
+    } ISER @0xC;
+
+    /* Bind interrupt enables to corresponding flags */
+    ISTAT.ARB_IF->enable = ISER.ARB_IE;
+    ISTAT.NACK_IF->enable = ISER.NACK_IE;
+    ISTAT.RX_IF->enable = ISER.RX_IE;
+    ISTAT.TX_IF->enable = ISER.TX_IE;
+
+
+    reg
+    {
+        field
+        {
+            brief = "TX/RX data register";
+            swacc; // expose write access event
+            sw = rw;
+            hw = rw;
+        } RXTX[7:0];
+    } DATA @ 0x10;
+
+    reg
+    {
+        default sw = rw;
+        default hw = r;
+
+        field
+        {
+            brief = "Bus hold timing";
+        } SHOLD[23:16];
+
+        field
+        {
+            brief = "SCL pulse timing";
+        } SCLT[15:8];
+
+        field
+        {
+            brief = "SDA pulse timing";
+        } SDAT[7:0];
+
+    } TIMING @ 0x14;
+};
+
+addrmap addrmap_I2C
+{
+    regs_I2C           I2C            @0x0000;
+
+    /* Documentation */
+    I2C.CTRL.EN->brief = "Enable/disable controller";
+    I2C.CTRL.EN->desc = "
+This is a long
+multiline description of the controller.
+";
+
+};
+
