@@ -47,7 +47,8 @@ logic               sw_decode_ready;
 logic               sw_interrupt_request_w;
 logic               sw_interrupt_request;
 
-{{ backend_signal_definitions }}
+{% for def in backend_signal_definitions %}
+{{ "%-7s" | format(def.kind) }}{% if def.range != None %}{{ "%-13s" | format(def.range_str) }}{% else %}             {% endif %}{{ def.name }};{% endfor %}
 
 /* Modules ----------------------------------------------------------------- */
 

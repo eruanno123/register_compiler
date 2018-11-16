@@ -15,10 +15,14 @@ PortDefinition = namedtuple('PortDefinition', 'direction width name')
 
 GeneratorOutput = namedtuple('GeneratorOutput', 'name content')
 
+# =============================================================================
+
 
 class SVGeneratorError (GeneratorError):
     """ Represents SystemVerilog generation error """
     pass
+
+# =============================================================================
 
 
 class RangeSpecifier:
@@ -32,14 +36,16 @@ class RangeSpecifier:
         return str(self.start_idx) if (self.start_idx == self.end_idx) \
             else str.format("{0}:{1}", self.start_idx, self.end_idx)
 
+# =============================================================================
+
 
 class SignalDeclaration:
     """ General representation of wire/logic declaration """
 
     def __init__(self, name, kind, range=None):
-        self.name = name
-        self.kind = kind
-        self.range = range
+        self._name = name
+        self._kind = kind
+        self._range = range
 
         expectedKind = ["reg", "logic", "wire"]
         if kind not in expectedKind:
@@ -47,11 +53,29 @@ class SignalDeclaration:
                 "Unknown declaration type '{0}'. Expected values: '{1}'", kind, expectedKind))
 
     def __str__(self):
-        s = str(self.kind)
-        if self.range:
-            s += ' [' + str(self.range) + ']'
-        s += ' ' + self.name + ';'
+        s = str(self._kind)
+        if self._range:
+            s += ' [' + str(self._range) + ']'
+        s += ' ' + self._name + ';'
         return s
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def kind(self):
+        return self._kind
+
+    @property
+    def range(self):
+        return self._range
+
+    @property
+    def range_str(self):
+        return '[' + str(self._range) + ']'
+
+# =============================================================================
 
 
 class SVSignalDeclarator (GeneratorBase):
@@ -150,9 +174,7 @@ class SystemVerilogGenerator (GeneratorBase):
         decl.extend(sigDecl.declareInterruptSignals(
             [r.inst.inst_name for r in flat.all_interrupt_fields]
         ))
-
-        backend_signal_definitions = '\n'.join(str(d) for d in decl)
-        templ_dict['backend_signal_definitions'] = backend_signal_definitions
+        templ_dict['backend_signal_definitions'] = decl
 
     def generate(self, rdl_root):
 
