@@ -52,20 +52,34 @@ class SystemVerilogGenerator (GeneratorBase):
             render_result[part] = self.renderCodePart(part, templ_dict)
         return render_result
 
+    def getInterfacePorts(self, interface_name, templ_dict):
+        return self.renderCodePart('interface_' + interface_name + '_ports', templ_dict)
+
+    def getInterfaceCode(self, interface_name, templ_dict):
+        return self.renderCodePart('interface_' + interface_name, templ_dict)
+
     def generate(self, rdl_root):
 
         templ_dict = self.createCommonTemplateDict()
 
-        # TODO: configurable interface
-        interface_name = 'interface_apb'
-        code_parts_list = ['top', 'backend', interface_name, 'intr', 'field']
+        # generate interface code
+        # TODO: configurable interface name
+        interface_name = 'apb'
+        interface_ports = self.getInterfacePorts(interface_name, templ_dict)
+        interface_code = self.getInterfaceCode(interface_name, templ_dict)
+        templ_dict['interface_name'] = interface_name
+        templ_dict['interface_ports'] = interface_ports
+        templ_dict['interface_code'] = interface_code
+
+        # generate common code parts
+        code_parts_list = ['top', 'interface', 'backend', 'intr', 'field']
         code_parts = self.renderListedCodeParts(code_parts_list, templ_dict)
 
         combine_template = self.env.get_template('sv/combine.sv')
         combine_dict = {
             'combine_top_module': code_parts['top'],
             'combine_backend_module': code_parts['backend'],
-            'combine_interface_module': code_parts[interface_name],
+            'combine_interface_module': code_parts['interface'],
             'combine_field_module': code_parts['field'],
             'combine_intr_module': code_parts['intr']
         }

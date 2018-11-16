@@ -5,8 +5,8 @@ module {{ module_root_name }} (
     input               clk,
     input               resetn,
 
-    /* SW interface (APB) */
-    {{ sw_ports }}
+    /* SW interface ({{ interface_name }}) */
+{{ interface_ports }}
 
     /* HW interface */
     {{ hw_ports }}
