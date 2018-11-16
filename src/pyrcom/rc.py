@@ -113,7 +113,3 @@ class RegisterCompiler:
         root = rdlc.elaborate(top_def_name=self.top_def_name)
 
         return root
-        # walker = RDLWalker(
-        #     unroll=True, skip_not_present=self.skip_not_present)
-        # listener = RegisterTreeExtractionListener()
-        # walker.walk(root, listener)
