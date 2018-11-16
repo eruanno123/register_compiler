@@ -60,9 +60,15 @@ class RegisterTreeExtractionListener(RDLListener):
 
 class RegisterCompiler:
 
-    def __init__(self, printer, cfg):
-        self.printer = printer  # type MessagePrinter
-        self.cfg = cfg
+    def __init__(self, printer=MessagePrinter(), **kwargs):
+        """ TROLOLO """
+
+        self.printer = printer
+        self.incl_search_paths = kwargs.pop('incl_search_paths', None)
+        self.top_def_name = kwargs.pop('top_def_name', None)
+        self.skip_not_present = kwargs.pop('skip_not_present', False)
+        self.warning_flags = kwargs.pop('warning_flags', [])
+        self.src_files = kwargs.pop('src_files', [])
 
     def getWarningMask(self, warning_flags):
         w_bits = {
@@ -76,27 +82,34 @@ class RegisterCompiler:
         for wf, suppressed in warning_flags.items():
             bits = w_bits[wf]
             if suppressed:
+                self.printer.print_message(
+                    "debug", str.format("suppress warning '{}'", wf))
                 mask &= ~bits
             else:
+                self.printer.print_message(
+                    "debug", str.format("enable warning '{}'", wf))
                 mask |= bits
         return mask
 
     def compile(self):
-        rcfg = self.cfg
 
-        warning_mask = self.getWarningMask(rcfg.warning_flags)
+        warning_mask = self.getWarningMask(self.warning_flags)
         self.printer.print_message("debug", str.format(
             "warning_mask: {0}", warning_mask), None)
 
         rdlc = RDLCompiler(message_printer=self.printer,
                            warning_flags=warning_mask)
 
-        for input_file in rcfg.src_files:
-            rdlc.compile_file(input_file, rcfg.incl_search_paths)
+        for input_file in self.src_files:
+            self.printer.print_message(
+                "info", str.format("Compiling {0} ...", input_file))
+            rdlc.compile_file(input_file, self.incl_search_paths)
 
-        root = rdlc.elaborate(top_def_name=rcfg.top_def_name)
+        self.printer.print_message("info", "Elaborating ...")
+        root = rdlc.elaborate(top_def_name=self.top_def_name)
 
-        walker = RDLWalker(
-            unroll=True, skip_not_present=rcfg.skip_not_present)
-        listener = RegisterTreeExtractionListener()
-        walker.walk(root, listener)
+        return root
+        # walker = RDLWalker(
+        #     unroll=True, skip_not_present=self.skip_not_present)
+        # listener = RegisterTreeExtractionListener()
+        # walker.walk(root, listener)

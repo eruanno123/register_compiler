@@ -21,24 +21,39 @@
 # Python Register Compiler - reference implementation
 
 from pyrcom.rc import RegisterCompiler
+from pyrcom.codegen.systemverilog import SystemVerilogGenerator, GeneratorOutput
 from systemrdl.messages import MessagePrinter
+from systemrdl.messages import RDLCompileError
 
 import argparse
+import collections
 
-
-class RDLArgumentError(Exception):
+class RDLArgumentError(RDLCompileError):
     """ Command line argument error """
     pass
 
 
 class RDLMessagePrinter(MessagePrinter):
+
+    def __init__(self):
+        self.severity_desc = { "error" : True, "warning" : True, "info" : False, "debug" : False }
+
+    def enable(self, severity):
+        self.severity_desc[severity] = True
+
+    def disable(self, severity):
+        self.severity_desc[severity] = False
+
     def print_message(self, severity, text, src_ref=None):
 
-        if (severity == "debug"):
-            self.emit_message(["debug: " + text])
-        else:
-            lines = self.format_message(severity, text, src_ref)
-            self.emit_message(lines)
+        if severity in self.severity_desc and self.severity_desc[severity]:
+            if (severity == "warning" or severity == "error"):
+                # use built in support for these severities
+                lines = self.format_message(severity, text, src_ref)
+                self.emit_message(lines)
+            else:
+                # just emit simple message
+                self.emit_message([str.format("{0}: {1}", severity, text)])
 
 
 class RDLCommandLineRunner:
@@ -80,6 +95,26 @@ class RDLCommandLineRunner:
             help="Enable warnings (-Wwarning-name) or disable (-Wno-warning-name)"
         )
         ap.add_argument(
+            '-v', '--verbose',
+            action='store_true',
+            dest='verbose_mode',
+            help="Enable verbose compilation status print out."
+        )
+        ap.add_argument(
+            '--debug',
+            action='store_true',
+            dest='debug_mode',
+            help="Enable compiler debug mode (with yet more compiler status print out)."
+        )
+        ap.add_argument(
+            '-O', '--output',
+            metavar='<file>',
+            type=str,
+            required=True,
+            dest='output_path',
+            help="Compile output artifact."
+        )
+        ap.add_argument(
             'src_files',
             metavar='src',
             nargs='+',
@@ -100,7 +135,10 @@ class RDLCommandLineRunner:
 
         supported = ['all', 'missing-reset', 'implicit',
                      'implicit-addr', 'implicit-field-pos']
-        suppressed = dict()
+        suppressed = collections.OrderedDict()
+
+        # Note: OrderedDict is useful to preserve sane behavior in something
+        # like: "-Wall -Wno-missing-reset"
 
         if warning_spec:
             for flag in warning_spec:  # type: str
@@ -124,9 +162,35 @@ class RDLCommandLineRunner:
             cfg = parser.parse_args()
             cfg.warning_flags = self.getWarningFlags(cfg.warning_spec)
 
-            compiler = RegisterCompiler(self.printer, cfg)
-            compiler.compile()
-        except RDLArgumentError as e:
+            if cfg.debug_mode:
+                self.printer.enable('info')
+                self.printer.enable('debug')
+            elif cfg.verbose_mode:
+                self.printer.enable('info')
+
+            compiler = RegisterCompiler(
+                printer=self.printer,
+                incl_search_paths=cfg.incl_search_paths,
+                top_def_name=cfg.top_def_name,
+                skip_not_present=cfg.skip_not_present,
+                warning_flags=cfg.warning_flags,
+                src_files=cfg.src_files
+            )
+
+            self.printer.print_message("info", "Start code compilation ...")
+            rdl_root = compiler.compile()
+
+            # TODO: select and configure generator from config
+            self.printer.print_message("info", "Generating ...")
+            code_generator = SystemVerilogGenerator(self.printer)
+            code = code_generator.generate(rdl_root)
+
+            self.printer.print_message("info", "Writing output ...")
+            with open(cfg.output_path, "w") as fd:
+                fd.write(code)
+
+
+        except RDLCompileError as e:
             self.printer.print_message("error", str(e), None)
 
 
