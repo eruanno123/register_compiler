@@ -24,6 +24,10 @@ class GeneratorBase:
             loader=FileSystemLoader(TEMPLATE_DIR)
         )
 
+    def print_message(self, severity, text, src_ref=None):
+        """ Wrapper to printer.print_message allowing default `src_ref` """
+        self.printer.print_message(severity, text, src_ref)
+
     def createCommonTemplateDict(self):
         return {
             'module_root_name': self.root_name
@@ -36,7 +40,7 @@ class SystemVerilogGenerator (GeneratorBase):
         """ Renders portion of code identified by argument `code_part_name`.
             Applies the parameters in `templ_dict` on the template.
         """
-        self.printer.print_message("info", str.format(
+        self.print_message("info", str.format(
             "Rendering module '{0}'", code_part_name))
         templ = self.env.get_template('sv/reg_' + code_part_name + '.sv')
         return templ.render(templ_dict)
