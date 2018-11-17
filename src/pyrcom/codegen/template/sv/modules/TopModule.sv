@@ -1,12 +1,12 @@
 /*****************************************************************************/
-/* Module: {{ module_root_name }}
+/* Module: {{ module_name }}
  */
-module {{ module_root_name }} (
+module {{ module_name }} (
     input               clk,
     input               resetn,
 
     /* SW interface ({{ interface_name }}) */
-{{ interface_ports }}
+    {{ interface_ports | indent(4) }}
 
     /* HW interface */
     {{ hw_ports }}
@@ -26,8 +26,8 @@ wire              sw_interrupt;
 
 /* Modules ----------------------------------------------------------------- */
 
-{{ module_root_name }}_interface iface   (.*);
-{{ module_root_name }}_backend   backend (.*);
+{{ module_name }}_interface iface   (.*);
+{{ module_name }}_backend   backend (.*);
 
 /* State machine ----------------------------------------------------------- */
 
@@ -35,4 +35,4 @@ wire              sw_interrupt;
 /* Interface assignment ---------------------------------------------------- */
 
 
-endmodule: {{ module_root_name }}
+endmodule: {{ module_name }}

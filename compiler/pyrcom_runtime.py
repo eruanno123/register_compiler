@@ -21,7 +21,8 @@
 # Python Register Compiler - reference implementation
 
 from pyrcom.rc import RegisterCompiler
-from pyrcom.codegen.systemverilog import SystemVerilogGenerator, GeneratorOutput
+from pyrcom.exceptions import PyrcomError
+from pyrcom.codegen.systemverilog import SystemVerilogEmitter, SystemVerilogBuilder
 from systemrdl.messages import MessagePrinter
 from systemrdl.messages import RDLCompileError
 
@@ -182,16 +183,21 @@ class RDLCommandLineRunner:
 
             # TODO: select and configure generator from config
             self.printer.print_message("info", "Generating ...")
-            code_generator = SystemVerilogGenerator(self.printer)
-            code = code_generator.generate(rdl_root)
+            language_config = {'design_name' : 'mydev'}
+            code_generator = SystemVerilogEmitter("sv", language_config, printer=self.printer, template_suffix=".sv")
+            language_builder = SystemVerilogBuilder(language_config, printer=self.printer)
+            code = code_generator.generate_code(language_builder, rdl_root)
 
             self.printer.print_message("info", "Writing output ...")
             with open(cfg.output_path, "w") as fd:
                 fd.write(code)
 
+        except (RDLCompileError, PyrcomError) as e:
+            message = str(e)
+            if hasattr(e, '__cause__') and e.__cause__:
+                message = "%s Details: %s" % (message, e.__cause__)
+            self.printer.print_message("error", message, None)
 
-        except RDLCompileError as e:
-            self.printer.print_message("error", str(e), None)
 
 
 if __name__ == "__main__":

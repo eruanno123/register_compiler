@@ -1,4 +1,3 @@
-
 assign sw_select    = psel;
 assign sw_address   = paddr;
 assign sw_enable    = penable;

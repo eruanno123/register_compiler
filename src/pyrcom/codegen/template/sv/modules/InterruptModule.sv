@@ -1,14 +1,13 @@
 /*****************************************************************************/
-/* Module: {{ module_root_name }}_intr
+/* Module: {{ module_name }}
  */
-module {{ module_root_name }}_intr #(
+module {{ module_name }} #(
     string ACTIVATION_TYPE = "ENABLE"
 )
 (
     input               clk,
     input               resetn,
     input               intr_enable,
-    input               intr_mask,
     input               intr_set,
     input               intr_clear,
     output logic        intr_status
@@ -26,15 +25,13 @@ generate
     case (ACTIVATION_TYPE)
         "ENABLE": begin
             assign intr_activated =  intr_enable;
-            assign _unused        =  intr_mask;
         end
         "MASK": begin
-            assign intr_activated = ~intr_mask;
-            assign _unused        =  intr_enable;
+            assign intr_activated = ~intr_enable;
         end
         default: begin
             assign intr_activated =  1'b1;
-            assign _unused        = & {intr_enable, intr_mask};
+            assign _unused        =  intr_enable;
         end
     endcase
 endgenerate
@@ -52,4 +49,4 @@ begin
     end
 end
 
-endmodule: {{ module_root_name }}_intr
+endmodule: {{ module_name }}

@@ -1,14 +1,14 @@
 /*****************************************************************************/
-/* Module: {{ module_root_name }}_interface
+/* Module: {{ module_name }}
  */
-module {{ module_root_name }}_interface (
+module {{ module_name }} (
     /* verilator lint_off UNUSED */
     input               clk,
     input               resetn,
     /* verilator lint_on UNUSED */
 
     /* SW interface ({{ interface_name }}) */
-{{ interface_ports }}
+    {{ interface_ports | indent(4) }}
 
     /* Backend interface */
     output              sw_select,
@@ -24,4 +24,4 @@ module {{ module_root_name }}_interface (
 
 {{ interface_code }}
 
-endmodule: {{ module_root_name }}_interface
+endmodule: {{ module_name }}

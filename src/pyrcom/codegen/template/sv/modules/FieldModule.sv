@@ -1,7 +1,7 @@
 /*****************************************************************************/
-/* Module: {{ module_root_name }}_field
+/* Module: {{ module_name }}
  */
-module {{ module_root_name }}_field #(
+module {{ module_name }} #(
     int                     FIELD_WIDTH = 32,
     bit [FIELD_WIDTH-1:0]   RESET_MASK  = 0,
     bit [FIELD_WIDTH-1:0]   RESET_VALUE = 0
@@ -39,4 +39,4 @@ endgenerate
 
 assign dq = field_data;
 
-endmodule: {{ module_root_name }}_field
+endmodule: {{ module_name }}

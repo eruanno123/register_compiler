@@ -36,8 +36,9 @@ regfile regs_I2C
         };
 
         enum CONTROL_MODE_encoding {
-            MASTER          = 1'b0;
-            SLAVE           = 1'b1;
+            MASTER          = 2'b00;
+            SLAVE           = 2'b01;
+            SPECIAL         = 2'b10;
         };
 
         default sw = w;
@@ -47,7 +48,7 @@ regfile regs_I2C
         {
             brief           = "Module operation mode";
             encode          = CONTROL_MODE_encoding;
-        } MODE [8:8];
+        } MODE [9:8];
 
         field
         {
@@ -96,7 +97,7 @@ regfile regs_I2C
     reg
     {
         default sw          = r;
-        default hw          = rw;
+        default hw          = w;
 
         /* Write one to clear policy */
         default level intr;
@@ -124,7 +125,7 @@ regfile regs_I2C
     reg
     {
         default sw          = rw;
-        default hw          = r;
+        default hw          = na;
         default reset       = 0x0;
         default reset_mask  = 0x1;
 

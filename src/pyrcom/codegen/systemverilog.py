@@ -1,4 +1,22 @@
-
+# Copyright © 2018 Mateusz Maciąg
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the “Software”), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software
+# is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from collections import namedtuple
@@ -6,123 +24,39 @@ from collections import namedtuple
 from systemrdl import RDLWalker, RDLListener
 from systemrdl.messages import MessagePrinter
 from systemrdl.node import *
-from pyrcom.codegen.base import GeneratorBase, GeneratorError
+
+from pyrcom.act.common import *
+from pyrcom.act.systemverilog import *
+from pyrcom.codegen.base import LanguageBuilderBase, LanguageEmitterBase
 
 import os
 
-Node
-PortDefinition = namedtuple('PortDefinition', 'direction width name')
+# =============================================================================
 
-GeneratorOutput = namedtuple('GeneratorOutput', 'name content')
+# Add extra properties to FieldNode class
+# as described here:
+# https://systemrdl-compiler.readthedocs.io/en/release-1.3/properties.html#derived-properties
+
+def test_is_hw_readable (node):
+    hw = node.get_property('hw')
+    return hw in (rdltypes.AccessType.rw, rdltypes.AccessType.rw1,
+                        rdltypes.AccessType.w, rdltypes.AccessType.w1)
+FieldNode.add_derived_property(test_is_hw_readable,  'is_hw_readable')
+
+def test_is_hw_writeable (node):
+    hw = node.get_property('hw')
+    return hw in (rdltypes.AccessType.rw, rdltypes.AccessType.rw1,
+                        rdltypes.AccessType.r)
+FieldNode.add_derived_property(test_is_hw_writeable, 'is_hw_writeable')
 
 # =============================================================================
 
 
-class SVGeneratorError (GeneratorError):
-    """ Represents SystemVerilog generation error """
-    pass
-
-# =============================================================================
-
-
-class RangeSpecifier:
-    """ Represents SV-style ranges like 31:0 """
-
-    def __init__(self, start_idx=0, end_idx=0):
-        self.start_idx = start_idx
-        self.end_idx = end_idx
-
-    def __str__(self):
-        return str(self.start_idx) if (self.start_idx == self.end_idx) \
-            else str.format("{0}:{1}", self.start_idx, self.end_idx)
-
-# =============================================================================
-
-
-class SignalDeclaration:
-    """ General representation of wire/logic declaration """
-
-    def __init__(self, name, kind, range=None):
-        self._name = name
-        self._kind = kind
-        self._range = range
-
-        expectedKind = ["reg", "logic", "wire"]
-        if kind not in expectedKind:
-            raise SVGeneratorError(str.format(
-                "Unknown declaration type '{0}'. Expected values: '{1}'", kind, expectedKind))
-
-    def __str__(self):
-        s = str(self._kind)
-        if self._range:
-            s += ' [' + str(self._range) + ']'
-        s += ' ' + self._name + ';'
-        return s
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def kind(self):
-        return self._kind
-
-    @property
-    def range(self):
-        return self._range
-
-    @property
-    def range_str(self):
-        return '[' + str(self._range) + ']'
-
-# =============================================================================
-
-
-class SVSignalDeclarator (GeneratorBase):
-    def __init__(self, printer=MessagePrinter(), data_width=32):
-        super(SVSignalDeclarator, self).__init__(printer)
-        self.data_width = data_width
-
-    def declareRegisterSignals(self, reg_list):
-        decl_list = []
-        data_range = RangeSpecifier(self.data_width-1, 0)
-        for reg in reg_list:
-            self.print_message("debug", str.format(
-                "declare signals for register '{0}'", reg))
-            reg_root_name = 'reg_' + reg + '__'
-            decl_list.append(SignalDeclaration(
-                reg_root_name + 'select', "logic"))
-            decl_list.append(SignalDeclaration(
-                reg_root_name + 'data_in', "wire", data_range))
-            decl_list.append(SignalDeclaration(
-                reg_root_name + 'data_out', "wire", data_range))
-        return decl_list
-
-    def declareInterruptSignals(self, intr_list):
-        decl_list = []
-        for intr in intr_list:
-            self.print_message("debug", str.format(
-                "declare signals for interrupt '{0}'", intr))
-            intr_root_name = 'intr_' + intr + '_'
-            for sig in ['enable', 'set', 'clear', 'status']:
-                decl_list.append(SignalDeclaration(
-                    intr_root_name + sig, "wire"))
-        return decl_list
-
-
-class FlattenListener (RDLListener):
+class SynthesisContext:
     def __init__(self):
         self._all_regs = []
         self._all_fields = []
         self._all_intr_fields = []
-
-    def enter_Reg(self, node):
-        self._all_regs.append(node)
-
-    def enter_Field(self, node):
-        self._all_fields.append(node)
-        if node.get_property("intr"):
-            self._all_intr_fields.append(node)
 
     @property
     def all_registers(self):
@@ -136,88 +70,165 @@ class FlattenListener (RDLListener):
     def all_interrupt_fields(self):
         return self._all_intr_fields
 
+# =============================================================================
 
-class SystemVerilogGenerator (GeneratorBase):
 
-    def renderCodePart(self, code_part_name, templ_dict):
-        """ Renders portion of code identified by argument `code_part_name`.
-            Applies the parameters in `templ_dict` on the template.
-        """
-        self.print_message("info", str.format(
-            "Rendering module '{0}'", code_part_name))
-        templ = self.env.get_template('sv/reg_' + code_part_name + '.sv')
-        return templ.render(templ_dict)
+class SynthesisRDLContext (SynthesisContext, RDLListener):
 
-    def renderListedCodeParts(self, code_parts, templ_dict):
-        """ Aggregated code rendering """
-        render_result = dict()
-        for part in code_parts:
-            render_result[part] = self.renderCodePart(part, templ_dict)
-        return render_result
+    def enter_Reg(self, node):
+        self._all_regs.append(node)
 
-    def getInterfacePorts(self, interface_name, templ_dict):
-        return self.renderCodePart('interface_' + interface_name + '_ports', templ_dict)
+    def enter_Field(self, node):
+        self._all_fields.append(node)
+        if node.get_property("intr"):
+            self._all_intr_fields.append(node)
 
-    def getInterfaceCode(self, interface_name, templ_dict):
-        return self.renderCodePart('interface_' + interface_name, templ_dict)
+# =============================================================================
 
-    def updateBackendVariables(self, rdl_root: RootNode, templ_dict: dict):
 
-        flat = FlattenListener()
-        RDLWalker(unroll=True).walk(rdl_root, flat)
+class Synthesis:
+    def __init__(self, context):
+        self.context = context  # type: SynthesisContext
 
-        sigDecl = SVSignalDeclarator(self.printer, 32)
-        decl = []
-        decl.extend(sigDecl.declareRegisterSignals(
-            [r.inst.inst_name for r in flat.all_registers]
-        ))
-        decl.extend(sigDecl.declareInterruptSignals(
-            [r.inst.inst_name for r in flat.all_interrupt_fields]
-        ))
-        templ_dict['backend_signal_definitions'] = decl
+    def do_synthesis(self):
+        pass
 
-    def generate(self, rdl_root):
+# =============================================================================
 
-        templ_dict = self.createCommonTemplateDict()
 
-        # generate interface code
-        # TODO: configurable interface name
-        interface_name = 'apb'
-        interface_ports = self.getInterfacePorts(interface_name, templ_dict)
-        interface_code = self.getInterfaceCode(interface_name, templ_dict)
-        templ_dict['interface_name'] = interface_name
-        templ_dict['interface_ports'] = interface_ports
-        templ_dict['interface_code'] = interface_code
+class HwPortsSynthesis (Synthesis):
 
-        self.updateBackendVariables(rdl_root, templ_dict)
+    def get_port_name(self, field):
+        return str.format('hw_{0}__{1}',
+                    field.parent.inst.inst_name,
+                    field.inst.inst_name)
 
-        # generate common code parts
-        code_parts_list = ['top', 'interface', 'backend', 'intr', 'field']
-        code_parts = self.renderListedCodeParts(code_parts_list, templ_dict)
+    def do_synthesis(self):
+        ports = []
+        for field in self.context.all_fields:  # type: FieldNode
+            if field.is_hw_writeable:
+                bit_high = field.inst.high
+                bit_low = field.inst.low
+                port_range = Range(field.inst.high, field.inst.low).shift_to_zero() \
+                             if (bit_high != bit_low) else None
 
-        combine_template = self.env.get_template('sv/combine.sv')
-        combine_dict = {
-            'combine_top_module': code_parts['top'],
-            'combine_backend_module': code_parts['backend'],
-            'combine_interface_module': code_parts['interface'],
-            'combine_field_module': code_parts['field'],
-            'combine_intr_module': code_parts['intr']
-        }
-        combine_code = combine_template.render(combine_dict)
+                port_def = Port(self.get_port_name(field), "output", port_range)
+                ports.append(port_def)
+        return ports
 
-        generic_layout_template = self.env.get_template('sv/generic_layout.sv')
-        generic_layout_dict = {
-            'file_license_header': '/* All rights reserved */',
-            'file_content': combine_code
-        }
-        result_code = generic_layout_template.render(generic_layout_dict)
 
-        return result_code
+# =============================================================================
 
-        # template_dict = {
-        #     'module_name': "SFR_backend",
-        #     'hw_ports': [
-        #         PortDefinition('output', None, 'test'),
-        #         PortDefinition('input', '[10:0]', 'myvector')
-        #     ]
-        # }
+class SynthesisFactory:
+
+    _tools = {
+        (Port, "hw_ports"): HwPortsSynthesis
+    }
+
+    def __init__(self, context):
+        self.context = context
+
+    def create(self, node_type, task) -> Synthesis:
+        key = (node_type, str(task))
+        tool_type = SynthesisFactory._tools.get(key, None)
+        if tool_type:
+            return tool_type(self.context)
+        else:
+            raise CodegenError(
+                "Unknown synthesis rule for node type '%s' and task '%s'" % (node_type, task))
+
+# =============================================================================
+
+
+class SystemVerilogBuilder (LanguageBuilderBase):
+
+    def check(self):
+        if 'design_name' not in self.language_config:
+            raise CodegenError(
+                "Language config does not have required 'design_name' parameter.")
+
+    def build_act(self, rdl_root):
+        self.check()
+
+        # Create synthesis context from RDL root node
+        synth_context = SynthesisRDLContext()
+        RDLWalker(unroll=True).walk(rdl_root, synth_context)
+
+        # Create synthesis tool factory
+        synth_toolbox = SynthesisFactory(synth_context)
+
+        # TODO: configurable interface
+        interface_name = 'APB'
+
+        top_module_name = self.language_config['design_name']
+
+        #
+        # Generate TOP Module
+        #
+        top_module = TopModule(top_module_name,
+                               interface_name=interface_name)
+
+        #
+        # Generate Backend Module
+        #
+        hw_ports_gen = synth_toolbox.create(Port, "hw_ports")
+        backend_module = BackendModule(top_module_name + '_backend',
+                                       hw_ports=hw_ports_gen.do_synthesis())
+
+        interface_module = InterfaceModule(
+            top_module_name + '_interface', interface_name=interface_name)
+
+        field_module = FieldModule(top_module_name + '_field')
+        intr_module = InterruptModule(top_module_name + '_intr')
+
+        root = GenericLayout(self.language_config.get('file_header', ''),
+                             self.language_config.get('file_footer', ''),
+                             Composite(top_module, backend_module, interface_module, field_module, intr_module))
+
+        return root
+
+
+class SystemVerilogEmitter (LanguageEmitterBase):
+
+    def visit_GenericLayout(self, node):
+        return self.render('GenericLayout', **{
+            'file_header': node.header,
+            'file_footer': node.footer,
+            'file_content': [self.visit(c) for c in node.children]
+        })
+
+    def visit_Composite(self, node):
+        return self.render('Composite', children=[self.visit(c) for c in node.children])
+
+    def visit_TopModule(self, node):
+        interface_template = 'interfaces/' + node.interface_name
+        interface_ports = self.render(interface_template + '_port')
+        return self.render('modules/TopModule',
+                           module_name=node.module_name,
+                           interface_ports=interface_ports)
+
+    def visit_BackendModule(self, node):
+        hw_ports_list = [self.visit(p) for p in node.hw_ports]
+        return self.render('modules/BackendModule',
+                           module_name=node.module_name,
+                           hw_ports=hw_ports_list)
+
+    def visit_InterfaceModule(self, node):
+        interface_template = 'interfaces/' + node.interface_name
+        interface_code = self.render(interface_template)
+        interface_ports = self.render(interface_template + '_port')
+        return self.render('modules/InterfaceModule',
+                           module_name=node.module_name,
+                           interface_name=node.interface_name,
+                           interface_ports=interface_ports,
+                           interface_code=interface_code)
+
+    def visit_FieldModule(self, node):
+        return self.render('modules/FieldModule', module_name=node.module_name)
+
+    def visit_InterruptModule(self, node):
+        return self.render('modules/InterruptModule', module_name=node.module_name)
+
+    def visit_Port(self, node):
+        return self.render('Port', port=node)
+

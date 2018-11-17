@@ -1,19 +1,17 @@
 /*****************************************************************************/
-/* Module: {{ module_root_name }}_backend
+/* Module: {{ module_name }}
  *
  * Register backend.
  * Connect SW ports to the desired register interface.
  * Connect HW ports to custom logic.
  */
-module {{ module_root_name }}_backend (
+module {{ module_name }} (
     input               clk,
     input               resetn,
 
     /* HW ports */
-    {% for port in hw_ports %}
-    {{ "%-7s" | format(port.direction) }}{% if port.width != None %}{{ "%-13s" | format(port.width) }}{% else %}             {% endif %}{{ port.name }},
+    {% for port in hw_ports %}{{ port }},
     {% endfor %}
-
     /* SW ports */
     input               sw_select,
     input  [31:0]       sw_address,
@@ -162,4 +160,4 @@ wire _unused = & {
     {{ linter_unused }}
 };
 
-endmodule: {{ module_root_name }}_backend
+endmodule: {{ module_name }}

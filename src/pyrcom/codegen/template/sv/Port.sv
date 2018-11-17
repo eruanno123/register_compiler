@@ -1,0 +1,1 @@
+{{ "%-7s" | format(port.direction) }}{% if port.range != None %}{{ "%-13s" | format(port.range.range_str) }}{% else %}             {% endif %}{{ port.name }}
