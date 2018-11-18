@@ -63,6 +63,14 @@ class SynthesisContext:
         self._all_regs = []
         self._all_fields = []
         self._all_intr_fields = []
+        self._undriven_nets = []
+        self._unused_nets = []
+
+    def add_undriven_net(self, net):
+        self._undriven_nets.append(net)
+
+    def add_unused_net(self, net):
+        self._unused_nets.append(net)
 
     @property
     def all_registers(self):

@@ -128,7 +128,7 @@ class SignalDeclaration (ACTNode):
         self._sanity_check()
 
     def __repr__(self):
-        return str.format(("{0} [{1}] {2};" if self._range else "{0} {2};"),
+        return str.format(("{0!r} [{1!r}] {2!r};" if self._range else "{0!r} {2!r};"),
                           self._kind, self._range, self._name)
 
     def _sanity_check(self):
@@ -150,6 +150,85 @@ class SignalDeclaration (ACTNode):
         return self._name
 
 # =============================================================================
+
+class Net (ACTNode):
+    """ Represents a SystemVerilog net """
+    def __init__(self, name, range=None):
+        self._name = name
+        self._range = range
+
+    def __repr__(self):
+        return str.format("{0!r}('{1!r}','{2!r}", self.__class__, self._name, self._range)
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def range(self):
+        return self._range
+
+    @property
+    def width(self):
+        r = self._range
+        return r.width if r else 1
+
+# =============================================================================
+
+
+class Assignment (ACTNode):
+
+    def __init__(self,
+                 lhs, rhs,
+                 lhs_range=None,
+                 rhs_range=None,
+                 is_continuous=False):
+        self._lhs = lhs
+        self._rhs = rhs
+        self._lhs_range = lhs_range
+        self._rhs_range = rhs_range
+        self._is_continuous = is_continuous
+        self._sanity_check()
+
+    def _sanity_check(self):
+        if (self.lhs_width != self.rhs_width):
+            raise CodegenError(str.format(
+                "Assignment width mismatch: left side expects {} bits, but got {}",
+                self.lhs_width, self.rhs_width), self)
+
+    def __repr__(self):
+        rl = str(self._lhs or '')
+        rr = str(self._rhs or '')
+        return str.format("{0}{}{} = {}{}",
+            'assign' if self._is_continuous else '',
+            self._lhs, rl,
+            self._rhs, rr)
+
+    @property
+    def lhs(self):
+        return self._lhs
+
+    @property
+    def lhs_range(self):
+        return self._lhs_range
+
+    @property
+    def lhs_width(self):
+        r = self._lhs_range
+        return r.width if r else 1
+
+    @property
+    def rhs(self):
+        return self._rhs
+
+    @property
+    def rhs_range(self):
+        return self._rhs_range
+
+    @property
+    def rhs_width(self):
+        r = self._rhs_range
+        return r.width if r else 1
 
 
 # =============================================================================
