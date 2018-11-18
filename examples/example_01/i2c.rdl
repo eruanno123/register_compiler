@@ -48,6 +48,7 @@ regfile regs_I2C
         {
             brief           = "Module operation mode";
             encode          = CONTROL_MODE_encoding;
+            reset           = 2'b10;
         } MODE [9:8];
 
         field

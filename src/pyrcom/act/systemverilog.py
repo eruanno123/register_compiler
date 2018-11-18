@@ -25,10 +25,28 @@ from pyrcom.exceptions import CodegenError
 # Abstract Component Tree classes
 # =============================================================================
 
+# Name alias
+Composite = ACTComposite
 
-class Composite (ACTComposite):
-    def __init__(self, *args):
-        super(Composite, self).__init__(args)
+# =============================================================================
+
+
+class LogicalGroup (Composite):
+    """ Represent logically grouped code components """
+
+    def __init__(self, level, description="", *args):
+        super(LogicalGroup, self).__init__(args)
+        self._level = level
+        self._description = description
+
+    @property
+    def level(self):
+        return self._level
+
+    @property
+    def description(self):
+        return self._description
+
 
 # =============================================================================
 
@@ -40,9 +58,12 @@ class Range (ACTNode):
         self._high = high
         self._low = low
 
-    def __str__(self):
+    def __repr__(self):
         return str(self._high) if (self._high == self._low) \
             else str.format("{0}:{1}", self._high, self._low)
+
+    def __str__(self):
+        return '[' + repr(self) + ']'
 
     def shift(self, offset):
         return Range(self._high+offset, self._low+offset)
@@ -58,11 +79,6 @@ class Range (ACTNode):
     def low(self):
         return self._low
 
-    @property
-    def range_str(self):
-        return '[' + str(self) + ']'
-
-
 # =============================================================================
 
 
@@ -73,12 +89,19 @@ class Port (ACTNode):
         self._name = name
         self._direction = direction
         self._range = range
+        self._sanity_check()
 
-    def __str__(self):
+    def __repr__(self):
         return str.format(
             "{0} [{1}] {2}" if self._range else "{0} {2}",
             self._direction, self._range, self._name
         )
+
+    def _sanity_check(self):
+        expectedDirection = ["input", "output", "inout"]
+        if self._direction not in expectedDirection:
+            raise CodegenError(str.format(
+                "Unknown direction '{0}'. Expected values: '{1}'", self._direction, expectedDirection), self)
 
     @property
     def name(self):
@@ -102,9 +125,10 @@ class SignalDeclaration (ACTNode):
         self._name = name
         self._kind = kind
         self._range = range
+        self._sanity_check()
 
-    def __str__(self):
-        return str.format(("{0} {1} {2};" if self._range else "{0} {2};"),
+    def __repr__(self):
+        return str.format(("{0} [{1}] {2};" if self._range else "{0} {2};"),
                           self._kind, self._range, self._name)
 
     def _sanity_check(self):
@@ -128,26 +152,38 @@ class SignalDeclaration (ACTNode):
 # =============================================================================
 
 
-class SignalDeclarationGroup (ACTComposite):
-    """ Represent logical group of logic or wire declarations """
+# =============================================================================
 
-    def __init__(self, *args):
-        super(SignalDeclarationGroup, self).__init__(args)
+
+# =============================================================================
 
 # =============================================================================
 
 
-class FieldModuleInstantiation (ACTNode):
+class FieldInstance (ACTNode):
 
-    def __init__(self, parent_reg_name, field_range=Range(), reset_mask=0, reset_value=0):
+    def __init__(self, parent_reg_name, field_name, field_range=Range(), reset_mask=0, reset_value=0):
+        self._parent_reg_name = parent_reg_name
+        self._field_name = field_name
         self._field_range = field_range
         self._field_reset_mask = reset_mask
         self._field_reset_value = reset_value
-        self._parent_reg_name = parent_reg_name
+
+    @property
+    def parent_reg_name(self):
+        return self._parent_reg_name
+
+    @property
+    def field_name(self):
+        return self._field_name
 
     @property
     def field_range(self):
         return self._field_range
+
+    @property
+    def field_width(self):
+        return self._field_range.high-self._field_range.low+1
 
     @property
     def field_reset_mask(self):
@@ -157,29 +193,39 @@ class FieldModuleInstantiation (ACTNode):
     def field_reset_value(self):
         return self._field_reset_value
 
-    @property
-    def parent_reg_name(self):
-        return self._parent_reg_name
 
 # =============================================================================
 
 
-class FieldModuleBypass (ACTNode):
+class FieldBypass (ACTNode):
 
-    def __init__(self, parent_reg_name):
+    def __init__(self, parent_reg_name, field_name, field_range=Range()):
         self._parent_reg_name = parent_reg_name
+        self._field_name = field_name
+        self._field_range = field_range
 
     @property
     def parent_reg_name(self):
         return self._parent_reg_name
 
+    @property
+    def field_name(self):
+        return self._field_name
+
+    @property
+    def field_range(self):
+        return self._field_range
+
 # =============================================================================
 
 
-class FieldModuleGroup (ACTComposite):
+class InterruptInstance (ACTNode):
+    def __init__(self, intr_name):
+        self._intr_name = intr_name
 
-    def __init__(self, *args):
-        super(FieldModuleGroup, self).__init__(args)
+    @property
+    def intr_name(self):
+        return self._intr_name
 
 # =============================================================================
 
@@ -199,9 +245,15 @@ class ModuleBase (ACTNode):
 
 class TopModule (ModuleBase):
     def __init__(self, module_name,
-                 interface_name):
+                 interface_name,
+                 hw_ports=[]):
         super(TopModule, self).__init__(module_name)
         self._interface_name = interface_name
+        self._hw_ports = hw_ports
+
+    @property
+    def hw_ports(self):
+        return self._hw_ports
 
     @property
     def interface_name(self):
@@ -213,13 +265,25 @@ class TopModule (ModuleBase):
 class BackendModule (ModuleBase):
 
     def __init__(self, module_name,
-                 hw_ports=[]):
+                 hw_ports=[],
+                 backend_signal_declarations=[],
+                 backend_instantiation=[]):
         super(BackendModule, self).__init__(module_name)
         self._hw_ports = hw_ports
+        self._backend_signal_declarations = backend_signal_declarations
+        self._backend_instantiation = backend_instantiation
 
     @property
     def hw_ports(self):
         return self._hw_ports
+
+    @property
+    def backend_signal_declarations(self):
+        return self._backend_signal_declarations
+
+    @property
+    def backend_instantiation(self):
+        return self._backend_instantiation
 
 # =============================================================================
 

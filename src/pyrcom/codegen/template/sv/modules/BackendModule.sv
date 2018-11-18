@@ -10,8 +10,8 @@ module {{ module_name }} (
     input               resetn,
 
     /* HW ports */
-    {% for port in hw_ports %}{{ port }},
-    {% endfor %}
+    {{ hw_ports | indent(4) }}
+
     /* SW ports */
     input               sw_select,
     input  [31:0]       sw_address,
@@ -45,8 +45,7 @@ logic               sw_decode_ready;
 logic               sw_interrupt_request_w;
 logic               sw_interrupt_request;
 
-{% for def in backend_signal_definitions %}
-{{ "%-7s" | format(def.kind) }}{% if def.range != None %}{{ "%-13s" | format(def.range_str) }}{% else %}             {% endif %}{{ def.name }};{% endfor %}
+{{ backend_signal_declarations }}
 
 /* Modules ----------------------------------------------------------------- */
 
@@ -161,3 +160,5 @@ wire _unused = & {
 };
 
 endmodule: {{ module_name }}
+
+

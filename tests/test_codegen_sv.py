@@ -13,11 +13,11 @@ def test_rangeSpecifier():
     assert range.high == 31 and range.low == 0
 
     # string conversion test
-    assert str(act.Range(15, 0)) == "15:0"
-    assert str(act.Range(14, 9)) == "14:9"
-    assert str(act.Range(-1, 0)) == "-1:0"
-    assert str(act.Range(7, 7)) == "7"
-    assert str(act.Range(0, 0)) == "0"
+    assert str(act.Range(15, 0)) == "[15:0]"
+    assert str(act.Range(14, 9)) == "[14:9]"
+    assert str(act.Range(-1, 0)) == "[-1:0]"
+    assert str(act.Range(7, 7)) == "[7]"
+    assert str(act.Range(0, 0)) == "[0]"
 
 
 # def test_signalDeclaration():

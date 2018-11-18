@@ -25,3 +25,5 @@ module {{ module_name }} (
 {{ interface_code }}
 
 endmodule: {{ module_name }}
+
+

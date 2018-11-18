@@ -9,7 +9,7 @@ module {{ module_name }} (
     {{ interface_ports | indent(4) }}
 
     /* HW interface */
-    {{ hw_ports }}
+    {{ hw_ports | indent(4) }}
 );
 
 /* Signals ----------------------------------------------------------------- */
@@ -36,3 +36,5 @@ wire              sw_interrupt;
 
 
 endmodule: {{ module_name }}
+
+

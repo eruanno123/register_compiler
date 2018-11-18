@@ -37,17 +37,23 @@ import os
 # as described here:
 # https://systemrdl-compiler.readthedocs.io/en/release-1.3/properties.html#derived-properties
 
-def test_is_hw_readable (node):
+def test_is_hw_readable (node: Node):
     hw = node.get_property('hw')
     return hw in (rdltypes.AccessType.rw, rdltypes.AccessType.rw1,
                         rdltypes.AccessType.w, rdltypes.AccessType.w1)
 FieldNode.add_derived_property(test_is_hw_readable,  'is_hw_readable')
 
-def test_is_hw_writeable (node):
+def test_is_hw_writeable (node: Node):
     hw = node.get_property('hw')
     return hw in (rdltypes.AccessType.rw, rdltypes.AccessType.rw1,
                         rdltypes.AccessType.r)
 FieldNode.add_derived_property(test_is_hw_writeable, 'is_hw_writeable')
+
+def test_is_interrupt_flag (node: Node):
+    return node.get_property('intr')
+
+FieldNode.add_derived_property(test_is_interrupt_flag, 'is_interrupt_flag')
+
 
 # =============================================================================
 
@@ -80,7 +86,7 @@ class SynthesisRDLContext (SynthesisContext, RDLListener):
 
     def enter_Field(self, node):
         self._all_fields.append(node)
-        if node.get_property("intr"):
+        if node.is_interrupt_flag:
             self._all_intr_fields.append(node)
 
 # =============================================================================
@@ -109,7 +115,7 @@ class HwPortsSynthesis (Synthesis):
             if field.is_hw_writeable:
                 bit_high = field.inst.high
                 bit_low = field.inst.low
-                port_range = Range(field.inst.high, field.inst.low).shift_to_zero() \
+                port_range = Range(bit_high, bit_low).shift_to_zero() \
                              if (bit_high != bit_low) else None
 
                 port_def = Port(self.get_port_name(field), "output", port_range)
@@ -119,23 +125,109 @@ class HwPortsSynthesis (Synthesis):
 
 # =============================================================================
 
+class HwRegSignalDeclarationSynthesis (Synthesis):
+
+    def do_synthesis(self):
+        decl = []
+        decl_spec = [
+            ("select", "logic", None),
+            ("data_in", "wire", Range(31,0)),
+            ("data_out", "wire", Range(31,0))
+        ]
+        for reg in self.context.all_registers: # type: RegNode
+            base_name = 'reg_' + reg.inst.inst_name + '__'
+            decl.extend(
+                [SignalDeclaration(base_name + spec[0], spec[1], spec[2]) for spec in decl_spec]
+            )
+        return decl
+
+class HwIntrSignalDeclarationSynthesis (Synthesis):
+
+    def do_synthesis(self):
+        decl = []
+        intr_sig = [ "enable", "set", "clear", "status" ]
+        for intr in self.context.all_interrupt_fields: # type: FieldNode
+            base_name = 'intr_' + intr.inst.inst_name + '_'
+            decl.extend(
+                [SignalDeclaration(base_name + sig, "wire") for sig in intr_sig]
+            )
+        return decl
+
+# =============================================================================
+
+class RegisterInstantiationSynthesis (Synthesis):
+
+    def synthesize_field(self, field: FieldNode):
+        parent_reg_name = field.parent.inst.inst_name
+        field_name  = field.inst.inst_name
+        field_range = Range(field.inst.high, field.inst.low)
+        if field.is_interrupt_flag:
+            return FieldBypass(parent_reg_name, field_name, field_range)
+        else:
+            reset_mask = field.get_property("reset_mask", default=0)
+            reset_val = field.get_property("reset")
+            return FieldInstance(parent_reg_name, field_name, field_range, reset_mask, reset_val)
+
+    def do_synthesis(self):
+        reg_inst_list = []
+        for reg in self.context.all_registers: # type: RegNode
+            reg_name = reg.inst.inst_name
+            reg_offset= reg.address_offset
+
+            field_inst_list = []
+            for field in reg.fields(): # TODO: use skip_not_present arg
+                field_name = field.inst.inst_name
+                field_group_desc = str.format("Field: {}", field_name)
+                field_data = self.synthesize_field(field)
+                field_group = LogicalGroup(2, field_group_desc, field_data)
+                field_inst_list.append(field_group)
+
+            reg_group_desc = str.format("Register: {:20} (offset +0x{:08X})", reg_name, reg_offset)
+            reg_group = LogicalGroup(2, reg_group_desc, field_inst_list)
+            reg_inst_list.append(reg_group)
+        return reg_inst_list
+
+class InterruptInstantiationSynthesis (Synthesis):
+
+    def synthesize_intr(self, intr_name):
+        return InterruptInstance(intr_name)
+
+    def do_synthesis(self):
+        intr_inst_list = []
+        for intr in self.context.all_interrupt_fields: # type: FieldNode
+            intr_name = intr.inst.inst_name
+            intr_group_desc = str.format("Interrupt: {}", intr_name)
+            intr_data = self.synthesize_intr(intr_name)
+            intr_group = LogicalGroup(2, intr_group_desc, intr_data)
+            intr_inst_list.append(intr_group)
+        return intr_inst_list
+# =============================================================================
+
+
 class SynthesisFactory:
 
     _tools = {
-        (Port, "hw_ports"): HwPortsSynthesis
+        "hw_ports" : HwPortsSynthesis,
+        "hw_reg_signals": HwRegSignalDeclarationSynthesis,
+        "hw_intr_signals": HwIntrSignalDeclarationSynthesis,
+        "hw_reg_instances": RegisterInstantiationSynthesis,
+        "hw_intr_instances" : InterruptInstantiationSynthesis,
     }
 
     def __init__(self, context):
         self.context = context
 
-    def create(self, node_type, task) -> Synthesis:
-        key = (node_type, str(task))
+    def create(self, task) -> Synthesis:
+        key = str(task)
         tool_type = SynthesisFactory._tools.get(key, None)
         if tool_type:
             return tool_type(self.context)
         else:
             raise CodegenError(
-                "Unknown synthesis rule for node type '%s' and task '%s'" % (node_type, task))
+                "Unknown synthesis rule '%s'" % task)
+
+    def synthesise(self, task):
+        return self.create(task).do_synthesis()
 
 # =============================================================================
 
@@ -163,23 +255,40 @@ class SystemVerilogBuilder (LanguageBuilderBase):
         top_module_name = self.language_config['design_name']
 
         #
-        # Generate TOP Module
-        #
-        top_module = TopModule(top_module_name,
-                               interface_name=interface_name)
-
-        #
         # Generate Backend Module
         #
-        hw_ports_gen = synth_toolbox.create(Port, "hw_ports")
+        hw_ports = synth_toolbox.synthesise("hw_ports")
+
+        backend_reg_decl = synth_toolbox.synthesise("hw_reg_signals")
+        backend_intr_decl = synth_toolbox.synthesise("hw_intr_signals")
+
+        field_instances = synth_toolbox.synthesise("hw_reg_instances")
+        intr_instances = synth_toolbox.synthesise("hw_intr_instances")
+
         backend_module = BackendModule(top_module_name + '_backend',
-                                       hw_ports=hw_ports_gen.do_synthesis())
+            hw_ports=hw_ports,
+            backend_signal_declarations=LogicalGroup(1, "Auto-Generated Signals", Composite(
+                LogicalGroup(2, "Register signals", backend_reg_decl),
+                LogicalGroup(2, "Interrupt signals", backend_intr_decl),
+            )),
+            backend_instantiation=Composite(
+                LogicalGroup(1, "REGISTER FILE DEFINITION", field_instances),
+                LogicalGroup(1, "INTERRUPT DEFINITION", intr_instances)
+            )
+        )
 
         interface_module = InterfaceModule(
             top_module_name + '_interface', interface_name=interface_name)
 
         field_module = FieldModule(top_module_name + '_field')
         intr_module = InterruptModule(top_module_name + '_intr')
+
+        #
+        # Generate TOP Module
+        #
+        top_module = TopModule(top_module_name,
+                               interface_name=interface_name,
+                               hw_ports=hw_ports)
 
         root = GenericLayout(self.language_config.get('file_header', ''),
                              self.language_config.get('file_footer', ''),
@@ -190,30 +299,56 @@ class SystemVerilogBuilder (LanguageBuilderBase):
 
 class SystemVerilogEmitter (LanguageEmitterBase):
 
-    def visit_GenericLayout(self, node):
+    def visit_GenericLayout(self, node: GenericLayout):
         return self.render('GenericLayout', **{
             'file_header': node.header,
             'file_footer': node.footer,
-            'file_content': [self.visit(c) for c in node.children]
+            'file_content': self.default_visit(node)
         })
 
-    def visit_Composite(self, node):
-        return self.render('Composite', children=[self.visit(c) for c in node.children])
+    def visit_Composite(self, node: Composite):
+        return self.render('Composite', children=self.default_visit(node))
 
-    def visit_TopModule(self, node):
+    def visit_LogicalGroup(self, node: LogicalGroup):
+        return self.render('LogicalGroupH%d' % node.level,
+            description=node.description,
+            content=self.default_visit(node))
+
+    def visit_FieldBypass(self, node: FieldBypass):
+        return self.render('instances/FieldBypass',
+            node=node,
+            module_name=self.language_config['design_name'])
+
+    def visit_FieldInstance(self, node: FieldInstance):
+        return self.render('instances/FieldInstance',
+            node=node,
+            module_name=self.language_config['design_name'])
+
+    def visit_InterruptInstance(self, node: InterruptInstance):
+        return self.render('instances/IntrInstance',
+            node=node,
+            module_name=self.language_config['design_name'])
+
+    def visit_TopModule(self, node: TopModule):
         interface_template = 'interfaces/' + node.interface_name
         interface_ports = self.render(interface_template + '_port')
+        hw_ports_list = self.visit(node.hw_ports)
         return self.render('modules/TopModule',
                            module_name=node.module_name,
-                           interface_ports=interface_ports)
-
-    def visit_BackendModule(self, node):
-        hw_ports_list = [self.visit(p) for p in node.hw_ports]
-        return self.render('modules/BackendModule',
-                           module_name=node.module_name,
+                           interface_ports=interface_ports,
                            hw_ports=hw_ports_list)
 
-    def visit_InterfaceModule(self, node):
+    def visit_BackendModule(self, node: BackendModule):
+        hw_ports_list = self.visit(node.hw_ports)
+        backend_signal_decl = self.visit(node.backend_signal_declarations)
+        backend_instantiation = self.visit(node.backend_instantiation)
+        return self.render('modules/BackendModule',
+                           module_name=node.module_name,
+                           hw_ports=hw_ports_list,
+                           backend_signal_declarations=backend_signal_decl,
+                           backend_instantiation=backend_instantiation)
+
+    def visit_InterfaceModule(self, node: InterfaceModule):
         interface_template = 'interfaces/' + node.interface_name
         interface_code = self.render(interface_template)
         interface_ports = self.render(interface_template + '_port')
@@ -223,12 +358,14 @@ class SystemVerilogEmitter (LanguageEmitterBase):
                            interface_ports=interface_ports,
                            interface_code=interface_code)
 
-    def visit_FieldModule(self, node):
+    def visit_FieldModule(self, node: FieldModule):
         return self.render('modules/FieldModule', module_name=node.module_name)
 
-    def visit_InterruptModule(self, node):
+    def visit_InterruptModule(self, node: InterruptModule):
         return self.render('modules/InterruptModule', module_name=node.module_name)
 
-    def visit_Port(self, node):
+    def visit_Port(self, node: Port):
         return self.render('Port', port=node)
 
+    def visit_SignalDeclaration(self, node: SignalDeclaration):
+        return self.render('SignalDeclaration', decl=node)

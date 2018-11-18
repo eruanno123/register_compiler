@@ -30,10 +30,18 @@ class ACTVisitor:
         return visitor(node)
 
     def default_visit(self, node):
+        if hasattr(node, '__getitem__'):
+            return self._visit_iterable(node)
+        elif hasattr(node, 'children'):
+            return self._visit_iterable(node.children)
+        else:
+            return str(node)
+
+    def _visit_iterable(self, iterable):
         ret = []
-        for c in node.children:
+        for c in iterable:
             ret.append(self.visit(c))
-        return ''.join(ret)
+        return '\n'.join(ret)
 
 # =============================================================================
 
@@ -50,6 +58,9 @@ class ACTBuilder:
 class ACTNode:
     """ Abstract Component Tree node base class """
 
+    def __repr__(self):
+        return "ACTNode:%s <children:%d>" % (self.__class__.__name__, len(self.children))
+
     @property
     def children(self):
         return tuple()
@@ -60,13 +71,13 @@ class ACTNode:
 class ACTComposite (ACTNode):
     """ Composite node. """
 
-    def __init__(self, args):
+    def __init__(self, *args):
         self._children = args
         pass
 
     @property
     def children(self):
-        return tuple(self._children)
+        return self._children
 
 # =============================================================================
 
