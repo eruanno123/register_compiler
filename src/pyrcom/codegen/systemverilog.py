@@ -54,6 +54,18 @@ def test_is_interrupt_flag (node: Node):
 
 FieldNode.add_derived_property(test_is_interrupt_flag, 'is_interrupt_flag')
 
+# =============================================================================
+# Custon jinja2 filters
+
+def verilog_literal(value, format='b', width=32):
+    if format == 'b':
+        return str.format("{}'b{:b}", width, value)
+    elif format == 'd':
+        return str.format("{}'d{}", width, value)
+    elif format == 'x':
+        return str.format("{}'h{:x}", width, value)
+    else:
+        return "<error>"
 
 # =============================================================================
 
@@ -211,6 +223,34 @@ class InterruptInstantiationSynthesis (Synthesis):
         return intr_inst_list
 # =============================================================================
 
+class CaseAssignment (Assignment):
+    def __init__(self,
+                 case_id,
+                 lhs, rhs):
+        super(CaseAssignment, self).__init__(lhs, rhs)
+        self._case_id = case_id
+
+    @property
+    def case_id(self):
+        return self._case_id
+
+class WriteSelectDecoder (SelectDecoder):
+    def __init__(self, address_map):
+        super(WriteSelectDecoder, self).__init__(address_map)
+
+class WriteSelectDecoderSynthesis (Synthesis):
+
+    def make_signal_name(self, reg_name):
+        return str.format("reg_{}__select", reg_name)
+
+    def do_synthesis(self):
+        addr_map = []
+        for reg in self.context.all_registers: # type: RegNode
+            addr_map.append( (int(reg.address_offset/4), self.make_signal_name(reg.inst.inst_name)) )
+        return WriteSelectDecoder(addr_map)
+
+# =============================================================================
+
 
 class SynthesisFactory:
 
@@ -220,6 +260,7 @@ class SynthesisFactory:
         "hw_intr_signals": HwIntrSignalDeclarationSynthesis,
         "hw_reg_instances": RegisterInstantiationSynthesis,
         "hw_intr_instances" : InterruptInstantiationSynthesis,
+        "write_sel_decoder" : WriteSelectDecoderSynthesis,
     }
 
     def __init__(self, context):
@@ -273,6 +314,8 @@ class SystemVerilogBuilder (LanguageBuilderBase):
         field_instances = synth_toolbox.synthesise("hw_reg_instances")
         intr_instances = synth_toolbox.synthesise("hw_intr_instances")
 
+        write_sel_decoder = synth_toolbox.synthesise("write_sel_decoder")
+
         backend_module = BackendModule(top_module_name + '_backend',
             hw_ports=hw_ports,
             backend_signal_declarations=LogicalGroup(1, "Auto-Generated Signals", Composite(
@@ -282,7 +325,8 @@ class SystemVerilogBuilder (LanguageBuilderBase):
             backend_instantiation=Composite(
                 LogicalGroup(1, "REGISTER FILE DEFINITION", field_instances),
                 LogicalGroup(1, "INTERRUPT DEFINITION", intr_instances)
-            )
+            ),
+            write_select_decoder=write_sel_decoder
         )
 
         interface_module = InterfaceModule(
@@ -306,6 +350,10 @@ class SystemVerilogBuilder (LanguageBuilderBase):
 
 
 class SystemVerilogEmitter (LanguageEmitterBase):
+
+    def do_prebuild(self, rdl_root):
+        self.print_message("debug", "pre-build event")
+        self.add_jinja_filter("verilog_literal", verilog_literal)
 
     def visit_GenericLayout(self, node: GenericLayout):
         return self.render('GenericLayout', **{
@@ -337,6 +385,9 @@ class SystemVerilogEmitter (LanguageEmitterBase):
             node=node,
             module_name=self.language_config['design_name'])
 
+    def visit_WriteSelectDecoder(self, node: WriteSelectDecoder):
+        return self.render('WriteSelectDecoder', address_map=node.address_map)
+
     def visit_TopModule(self, node: TopModule):
         interface_template = 'interfaces/' + node.interface_name
         interface_ports = self.render(interface_template + '_port')
@@ -350,11 +401,13 @@ class SystemVerilogEmitter (LanguageEmitterBase):
         hw_ports_list = self.visit(node.hw_ports)
         backend_signal_decl = self.visit(node.backend_signal_declarations)
         backend_instantiation = self.visit(node.backend_instantiation)
+        write_select_decoder = self.visit(node.write_select_decoder)
         return self.render('modules/BackendModule',
                            module_name=node.module_name,
                            hw_ports=hw_ports_list,
                            backend_signal_declarations=backend_signal_decl,
-                           backend_instantiation=backend_instantiation)
+                           backend_instantiation=backend_instantiation,
+                           write_select_decoder=write_select_decoder)
 
     def visit_InterfaceModule(self, node: InterfaceModule):
         interface_template = 'interfaces/' + node.interface_name

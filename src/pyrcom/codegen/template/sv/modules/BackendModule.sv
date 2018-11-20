@@ -92,20 +92,7 @@ end
 /***
  *** Write select decoder
  ***/
-always_comb
-begin
-    {{ write_select_init }}
-    sw_decode_select_valid      = 1'b0;
-
-    if (sw_state == SW_STATE_WRITE_ACCESS) begin
-        sw_decode_select_valid  = 1'b1;
-        case (sw_decode_address)
-            {{ write_select_cases }}
-            default: /* TODO: decode error */
-                    sw_decode_select_valid  = 1'b0;
-        endcase
-    end // sw_state == SW_STATE_WRITE_ACCESS
-end
+{{ write_select_decoder }}
 
 /***
  *** Read data decoder

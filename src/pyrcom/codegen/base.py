@@ -73,6 +73,9 @@ class LanguageEmitterBase (LanguageComponent, ACTVisitor):
         self._env = env
         self._template_suffix = template_suffix
 
+    def add_jinja_filter(self, filter_name, filter):
+        self._env.filters[filter_name] = filter
+
     def get_template(self, template_name):
         path = self._language_name + '/' + template_name + self._template_suffix
         return self._env.get_template(path)
@@ -86,11 +89,21 @@ class LanguageEmitterBase (LanguageComponent, ACTVisitor):
 
     def generate_code(self, language_builder, rdl_root):
         try:
+            self.do_prebuild(rdl_root)
             act_root = language_builder.build_act(rdl_root)
-            return self.visit(act_root)
+            code = self.visit(act_root)
+            self.do_postbuild(rdl_root, code)
+            return code
+
         except TemplateError as e:
             raise CodegenTemplateError() from e
         # raise CodegenTemplateError("Code template error", inner_error=e)
+
+    def do_prebuild(self, rdl_root):
+        pass
+
+    def do_postbuild(self, rdl_root, generated_code):
+        pass
 
     @property
     def language_name(self):

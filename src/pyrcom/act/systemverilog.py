@@ -346,11 +346,13 @@ class BackendModule (ModuleBase):
     def __init__(self, module_name,
                  hw_ports=[],
                  backend_signal_declarations=[],
-                 backend_instantiation=[]):
+                 backend_instantiation=[],
+                 write_select_decoder=None):
         super(BackendModule, self).__init__(module_name)
         self._hw_ports = hw_ports
         self._backend_signal_declarations = backend_signal_declarations
         self._backend_instantiation = backend_instantiation
+        self._write_select_decoder = write_select_decoder
 
     @property
     def hw_ports(self):
@@ -363,6 +365,10 @@ class BackendModule (ModuleBase):
     @property
     def backend_instantiation(self):
         return self._backend_instantiation
+
+    @property
+    def write_select_decoder(self):
+        return self._write_select_decoder
 
 # =============================================================================
 
@@ -394,20 +400,12 @@ class InterruptModule (ModuleBase):
 
 # =============================================================================
 
-# TODO: translate to proper ACT
-# class SVInstantiator (GeneratorBase):
-#     def __init__(self, printer=MessagePrinter()):
-#         super(SVInstantiator, self).__init__(printer)
+class SelectDecoder (ACTNode):
 
-#     def instantiateFieldBypass(self, reg_name, field_name):
-#         templ = self.env.get_template('sv/reg_instantiate_field_bypass.sv')
-#         templ_args = self.template_args
-#         templ_args['reg_name'] = reg_name
-#         templ_args['field_name'] = field_name
-#         return templ.render(templ_args)
+    def __init__(self, address_map):
+        """ address_map keeps mapping between address and selected signal """
+        self._address_map = address_map
 
-#     def instantiateField(self, field_node):
-#         templ = self.env.get_template('sv/reg_instantiate_field.sv')
-#         templ_args = self.template_args
-#         ctx = FieldInstantiationContext.createFromNode(field_node)
-#         return ctx
+    @property
+    def address_map(self):
+        return self._address_map
