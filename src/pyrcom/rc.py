@@ -20,7 +20,8 @@
 
 from systemrdl import RDLCompiler, RDLListener, RDLWalker, RDLCompileError
 from systemrdl.node import FieldNode
-from systemrdl.messages import *
+from systemrdl.messages import MessagePrinter, Severity
+import systemrdl.warnings as warnings
 
 from pyrcom.regtree import RegisterTree
 
@@ -76,29 +77,29 @@ class RegisterCompiler:
 
     def getWarningMask(self, warning_flags):
         w_bits = {
-            'all': W_ALL,
-            'missing-reset': W_MISSING_RESET,
-            'implicit': W_IMPLICIT_ADDR | W_IMPLICIT_FIELD_POS,
-            'implicit-addr': W_IMPLICIT_FIELD_POS,
-            'implicit-field-pos': W_IMPLICIT_ADDR
+            'all': warnings.ALL,
+            'missing-reset': warnings.MISSING_RESET,
+            'implicit': warnings.IMPLICIT_ADDR | warnings.IMPLICIT_FIELD_POS,
+            'implicit-addr': warnings.IMPLICIT_FIELD_POS,
+            'implicit-field-pos': warnings.IMPLICIT_ADDR
         }
         mask = 0
         for wf, suppressed in warning_flags.items():
             bits = w_bits[wf]
             if suppressed:
                 self.print_message(
-                    "debug", str.format("suppress warning '{}'", wf))
+                    Severity.NONE, str.format("suppress warning '{}'", wf))
                 mask &= ~bits
             else:
                 self.print_message(
-                    "debug", str.format("enable warning '{}'", wf))
+                    Severity.NONE, str.format("enable warning '{}'", wf))
                 mask |= bits
         return mask
 
     def compile(self):
 
         warning_mask = self.getWarningMask(self.warning_flags)
-        self.print_message("debug", str.format(
+        self.print_message(Severity.NONE, str.format(
             "warning_mask: {0}", warning_mask), None)
 
         rdlc = RDLCompiler(message_printer=self.printer,
@@ -106,10 +107,10 @@ class RegisterCompiler:
 
         for input_file in self.src_files:
             self.print_message(
-                "info", str.format("Compiling {0} ...", input_file))
+                Severity.NONE, str.format("Compiling {0} ...", input_file))
             rdlc.compile_file(input_file, self.incl_search_paths)
 
-        self.print_message("info", "Elaborating ...")
+        self.print_message(Severity.NONE, "Elaborating ...")
         root = rdlc.elaborate(top_def_name=self.top_def_name)
 
         return root
