@@ -1,0 +1,1 @@
+{{ "%-7s" | format(decl.kind) }}{% if decl.range != None %}{{ "%-13s" | format(decl.range) }}{% else %}             {% endif %}{{ decl.name }};

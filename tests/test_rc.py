@@ -1,16 +1,26 @@
 import pytest
 
 from systemrdl import RDLCompileError
-from register_compiler.rc import MyCompiler
-
-from register_compiler.sv.codegen import ASTCodeGenerator
-
-
-def test_nonExistingFile():
-    with pytest.raises(FileNotFoundError):
-        compiler = MyCompiler(["non_existing_file"])
-        compiler.compile()
+from systemrdl.messages import MessagePrinter
+from pyrcom.rc import RegisterCompiler
 
 
-def test_astGenerator():
-    cgen = ASTCodeGenerator()
+class Cfg:
+    def __init__(self):
+        self.incl_search_paths = ['examples/example_01/doc']
+        self.top_def_name = None
+        self.skip_not_present = False
+        self.warning_flags = {'missing-reset': False}
+        self.src_files = ['examples/example_01/i2c.rdl']
+
+
+def test_basicCompileNoError():
+
+    cfg = {
+        'incl_search_paths': ['examples/example_01/doc'],
+        'warning_flags': {'all': True, 'missing-reset': False},
+        'src_files': ['examples/example_01/i2c.rdl']
+    }
+
+    compiler = RegisterCompiler(**cfg)
+    compiler.compile()

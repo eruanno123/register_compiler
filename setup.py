@@ -5,7 +5,7 @@ from glob import glob
 
 from setuptools import find_packages
 
-setup(name='Register Compiler',
+setup(name='Python Register Compiler',
       version='0.1',
       description='SystemRDL Register Compiler Tools',
       author='Mateusz Maciąg',

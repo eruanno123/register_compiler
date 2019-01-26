@@ -1,0 +1,12 @@
+
+/* This example shows how register documenation can be nicely
+   separated from definition and later included in another
+   file
+*/
+
+/* Documentation */
+I2C.CTRL.EN->brief = "Enable/disable controller";
+I2C.CTRL.EN->desc = "
+    This is a long
+    multiline description of the controller.
+";

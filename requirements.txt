@@ -1,2 +1,2 @@
-systemrdl-compiler
+systemrdl-compiler>=1.4
 jinja2
