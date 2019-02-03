@@ -196,4 +196,3 @@ addrmap addrmap_I2C
     `include "i2c_doc.rdl"
 
 };
-

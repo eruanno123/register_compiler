@@ -23,7 +23,7 @@
 from pyrcom.rc import RegisterCompiler
 from pyrcom.exceptions import PyrcomError
 from pyrcom.codegen.systemverilog import SystemVerilogEmitter, SystemVerilogBuilder
-from systemrdl.messages import MessagePrinter
+from systemrdl.messages import MessagePrinter, Severity
 from systemrdl.messages import RDLCompileError
 
 import argparse
@@ -37,7 +37,7 @@ class RDLArgumentError(RDLCompileError):
 class RDLMessagePrinter(MessagePrinter):
 
     def __init__(self):
-        self.severity_desc = { "error" : True, "warning" : True, "info" : False, "debug" : False }
+        self.severity_desc = { Severity.FATAL: True, Severity.ERROR : True, Severity.WARNING : True, Severity.NONE : False }
 
     def enable(self, severity):
         self.severity_desc[severity] = True
@@ -48,7 +48,7 @@ class RDLMessagePrinter(MessagePrinter):
     def print_message(self, severity, text, src_ref=None):
 
         if severity in self.severity_desc and self.severity_desc[severity]:
-            if (severity == "warning" or severity == "error"):
+            if (severity == Severity.FATAL or severity == Severity.ERROR):
                 # use built in support for these severities
                 lines = self.format_message(severity, text, src_ref)
                 self.emit_message(lines)
@@ -163,11 +163,8 @@ class RDLCommandLineRunner:
             cfg = parser.parse_args()
             cfg.warning_flags = self.getWarningFlags(cfg.warning_spec)
 
-            if cfg.debug_mode:
-                self.printer.enable('info')
-                self.printer.enable('debug')
-            elif cfg.verbose_mode:
-                self.printer.enable('info')
+            if cfg.verbose_mode:
+                self.printer.enable(Severity.NONE)
 
             compiler = RegisterCompiler(
                 printer=self.printer,
@@ -178,17 +175,17 @@ class RDLCommandLineRunner:
                 src_files=cfg.src_files
             )
 
-            self.printer.print_message("info", "Start code compilation ...")
+            self.printer.print_message(Severity.NONE, "Start code compilation ...")
             rdl_root = compiler.compile()
 
             # TODO: select and configure generator from config
-            self.printer.print_message("info", "Generating ...")
+            self.printer.print_message(Severity.NONE, "Generating ...")
             language_config = {'design_name' : 'mydev'}
             code_generator = SystemVerilogEmitter("sv", language_config, printer=self.printer, template_suffix=".sv")
             language_builder = SystemVerilogBuilder(language_config, printer=self.printer)
             code = code_generator.generate_code(language_builder, rdl_root)
 
-            self.printer.print_message("info", "Writing output ...")
+            self.printer.print_message(Severity.NONE, "Writing output ...")
             with open(cfg.output_path, "w") as fd:
                 fd.write(code)
 
@@ -196,7 +193,7 @@ class RDLCommandLineRunner:
             message = str(e)
             if hasattr(e, '__cause__') and e.__cause__:
                 message = "%s Details: %s" % (message, e.__cause__)
-            self.printer.print_message("error", message, None)
+            self.printer.print_message(Severity.ERROR, message, None)
 
 
 
